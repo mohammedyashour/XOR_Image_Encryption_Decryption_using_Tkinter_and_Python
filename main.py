@@ -84,22 +84,29 @@ class EncryptionController:
         # Open file dialog
         file_path = file_utils.browse_for_file(file_types)
         if file_path:
-            # Set file in the appropriate model
-            if media_type == "image":
-                filename = self.image_crypto.set_file(file_path)
-                if not filename and operation == "encrypt":
-                    self.view.show_message("Invalid File", "Please select a valid image file.", "error")
-                    return
-            else:  # video
-                filename = self.video_crypto.set_file(file_path)
-                if not filename and operation == "encrypt":
-                    self.view.show_message("Invalid File", "Please select a valid video file.", "error")
-                    return
-            
             # If we're decrypting, we need to check if it's an encrypted file
-            if operation == "decrypt" and not file_utils.is_encrypted_file(file_path):
-                self.view.show_message("Invalid File", "Please select a valid encrypted file (.bin).", "error")
-                return
+            if operation == "decrypt":
+                if not file_utils.is_encrypted_file(file_path):
+                    self.view.show_message("Invalid File", "Please select a valid encrypted file (.bin).", "error")
+                    return
+                
+                # For decryption, directly set the file path in the appropriate model
+                if media_type == "image":
+                    self.image_crypto.selected_file_path = file_path
+                else:  # video
+                    self.video_crypto.selected_file_path = file_path
+            else:  # encrypt
+                # Set file in the appropriate model
+                if media_type == "image":
+                    filename = self.image_crypto.set_file(file_path)
+                    if not filename:
+                        self.view.show_message("Invalid File", "Please select a valid image file.", "error")
+                        return
+                else:  # video
+                    filename = self.video_crypto.set_file(file_path)
+                    if not filename:
+                        self.view.show_message("Invalid File", "Please select a valid video file.", "error")
+                        return
             
             # Update the UI
             self.view.update_file_label(os.path.basename(file_path))

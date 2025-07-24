@@ -58,6 +58,9 @@ class ImageCrypto:
         
         self.processing = True
         try:
+            # Store original extension for later recovery
+            original_extension = file_utils.get_file_info(self.selected_file_path)['extension']
+            
             # Open file for reading
             with open(self.selected_file_path, 'rb') as fin:
                 image = fin.read()
@@ -72,17 +75,22 @@ class ImageCrypto:
                 if index % (total_bytes // 10) == 0 and progress_callback:
                     progress = (index / total_bytes) * 100
                     progress_callback(progress)
-                    time.sleep(0.01)  # Small delay to show progress
+                    # Removed time.sleep to prevent UI freezing
             
             # Write encrypted data
             with open(self.selected_file_path, 'wb') as fin:
                 fin.write(image)
             
-            # Rename file with .bin extension
-            original_extension = file_utils.get_file_info(self.selected_file_path)['extension']
-            new_path = file_utils.rename_file(self.selected_file_path, file_utils.ENCRYPTED_EXTENSION)
+            # Rename file with .bin extension and store original extension in filename
+            base_name = file_utils.get_file_info(self.selected_file_path)['base_name']
+            new_base_name = f"{base_name}__{original_extension[1:]}"  # Store extension without the dot
+            new_path = os.path.join(
+                os.path.dirname(self.selected_file_path),
+                f"{new_base_name}{file_utils.ENCRYPTED_EXTENSION}"
+            )
             
-            if new_path:
+            try:
+                os.rename(self.selected_file_path, new_path)
                 self.selected_file_path = new_path
                 self.operation_successful = True
                 
@@ -92,8 +100,8 @@ class ImageCrypto:
                 if callback:
                     callback(True, "The image has been encrypted successfully!")
                 return True, "The image has been encrypted successfully!"
-            else:
-                return False, "Failed to rename the encrypted file"
+            except Exception as e:
+                return False, f"Failed to rename the encrypted file: {str(e)}"
             
         except Exception as e:
             self.operation_successful = False
@@ -123,14 +131,19 @@ class ImageCrypto:
         
         self.processing = True
         try:
-            # Rename file with original extension (assuming .jpg for now)
-            # In a more advanced implementation, we could store the original extension
-            new_path = file_utils.rename_file(self.selected_file_path, '.jpg')
+            # Extract the original extension from the filename
+            file_info = file_utils.get_file_info(self.selected_file_path)
+            base_name = file_info['base_name']
             
-            if not new_path:
-                return False, "Failed to rename the file for decryption"
-                
-            self.selected_file_path = new_path
+            # Check if the filename contains the original extension
+            original_extension = '.jpg'  # Default if we can't determine
+            if '__' in base_name:
+                # Extract the extension from the filename (after the double underscore)
+                parts = base_name.split('__')
+                if len(parts) > 1 and parts[-1]:
+                    original_extension = f".{parts[-1]}"
+                    # Remove the extension part from the base name
+                    base_name = '__'.join(parts[:-1])
             
             # Open file for reading
             with open(self.selected_file_path, 'rb') as fin:
@@ -146,13 +159,28 @@ class ImageCrypto:
                 if index % (total_bytes // 10) == 0 and progress_callback:
                     progress = (index / total_bytes) * 100
                     progress_callback(progress)
-                    time.sleep(0.01)  # Small delay to show progress
+                    # Removed time.sleep to prevent UI freezing
             
-            # Write decrypted data
-            with open(self.selected_file_path, 'wb') as fin:
-                fin.write(image)
+            # Create the new path with the original extension
+            new_path = os.path.join(
+                file_info['directory'],
+                f"{base_name}{original_extension}"
+            )
             
+            # Write decrypted data to a new file
+            with open(new_path, 'wb') as fout:
+                fout.write(image)
+            
+            # Delete the original encrypted file
+            try:
+                os.remove(self.selected_file_path)
+            except Exception as e:
+                print(f"Warning: Could not delete original encrypted file: {str(e)}")
+            
+            # Update the selected file path
+            self.selected_file_path = new_path
             self.operation_successful = True
+            
             if progress_callback:
                 progress_callback(100)
             
