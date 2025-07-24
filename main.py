@@ -171,6 +171,16 @@ class EncryptionController:
         self.view.show_progress(False)
         self.view.show_status(success, message)
         self.view.process_button.config(state=tk.NORMAL)
+        
+        # Add a "Back to Main Menu" button to allow starting a new operation
+        back_button = self.view.create_styled_button(
+            self.view.main_frame,
+            "Back to Main Menu",
+            "#3498db",
+            "#2980b9"
+        )
+        back_button.config(command=self.view.show_welcome_screen)
+        back_button.pack(pady=20)
 
 
 # Import os here to avoid circular imports
