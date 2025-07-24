@@ -123,34 +123,22 @@ class VideoCrypto:
             tuple: (success, message)
         """
         if not self.selected_file_path:
+            if callback:
+                callback(False, "No file selected")
             return False, "No file selected"
         
         if not file_utils.is_encrypted_file(self.selected_file_path):
+            if callback:
+                callback(False, "Selected file is not an encrypted file")
             return False, "Selected file is not an encrypted file"
         
         self.processing = True
         try:
-            # Get the original file info
-            file_info = file_utils.get_file_info(self.selected_file_path)
-            
-            # Determine the original extension
-            # In a real implementation, we might store this information in metadata
-            # For now, we'll ask the user or use a default extension
-            original_extension = '.mp4'  # Default to .mp4
-            
-            # Rename file with original extension
-            new_path = file_utils.rename_file(self.selected_file_path, original_extension)
-            
-            if not new_path:
-                return False, "Failed to rename the file for decryption"
-                
-            self.selected_file_path = new_path
-            
-            # Open file for reading
+            # First, read the encrypted file
             with open(self.selected_file_path, 'rb') as fin:
                 video = fin.read()
             
-            # Convert to bytearray
+            # Convert to bytearray for decryption
             video = bytearray(video)
             
             # Perform XOR operation with progress updates
@@ -165,19 +153,58 @@ class VideoCrypto:
                 if progress_callback:
                     progress = (index / total_bytes) * 100
                     progress_callback(progress)
-                    time.sleep(0.01)  # Small delay to show progress
+                    # Removed time.sleep to prevent UI freezing
             
-            # Write decrypted data
-            with open(self.selected_file_path, 'wb') as fin:
-                fin.write(video)
+            # Get the original file info
+            file_info = file_utils.get_file_info(self.selected_file_path)
+            base_name = file_info['base_name']
             
-            self.operation_successful = True
-            if progress_callback:
-                progress_callback(100)
+            # Extract original extension from filename (e.g., "video_mp4.bin" -> ".mp4")
+            original_extension = None
+            if '_' in base_name:
+                # Extract the extension part after the last underscore
+                ext_part = base_name.split('_')[-1]
+                if ext_part and ext_part in ['mp4', 'avi', 'mov', 'mkv']:  # Validate it's a known video extension
+                    original_extension = f".{ext_part}"
             
-            if callback:
-                callback(True, "The video has been decrypted successfully!")
-            return True, "The video has been decrypted successfully!"
+            # If we couldn't extract the extension, default to .mp4
+            if not original_extension:
+                original_extension = '.mp4'
+            
+            # Create a new filename without the extension marker
+            if '_' in base_name:
+                new_base_name = '_'.join(base_name.split('_')[:-1])  # Remove the extension part
+            else:
+                new_base_name = base_name
+                
+            # Create the new path with the original extension
+            new_path = os.path.join(file_info['directory'], f"{new_base_name}{original_extension}")
+            
+            # Write decrypted data to the new file
+            with open(new_path, 'wb') as fout:
+                fout.write(video)
+            
+            # Verify the new file exists before removing the original
+            if os.path.exists(new_path):
+                # Remove the encrypted file
+                try:
+                    os.remove(self.selected_file_path)
+                except:
+                    pass  # If removal fails, continue anyway
+                
+                self.selected_file_path = new_path
+                self.operation_successful = True
+                
+                if progress_callback:
+                    progress_callback(100)
+                
+                if callback:
+                    callback(True, f"The video has been decrypted successfully to {os.path.basename(new_path)}!")
+                return True, f"The video has been decrypted successfully to {os.path.basename(new_path)}!"
+            else:
+                if callback:
+                    callback(False, "Failed to create the decrypted file")
+                return False, "Failed to create the decrypted file"
             
         except Exception as e:
             self.operation_successful = False

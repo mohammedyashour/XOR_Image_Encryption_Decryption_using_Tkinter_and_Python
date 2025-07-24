@@ -127,13 +127,32 @@ class ImageCrypto:
             tuple: (success, message)
         """
         if not self.selected_file_path:
+            if callback:
+                callback(False, "No file selected")
             return False, "No file selected"
         
         if not file_utils.is_encrypted_file(self.selected_file_path):
+            if callback:
+                callback(False, "Selected file is not an encrypted file")
             return False, "Selected file is not an encrypted file"
         
         self.processing = True
         try:
+            # First, read the encrypted file
+            with open(self.selected_file_path, 'rb') as fin:
+                image = fin.read()
+            
+            # Convert to bytearray for decryption
+            image = bytearray(image)
+            
+            # Perform XOR operation with progress updates
+            total_bytes = len(image)
+            for index, value in enumerate(image):
+                image[index] = value ^ self.key
+                if index % max(1, (total_bytes // 10)) == 0 and progress_callback:
+                    progress = (index / total_bytes) * 100
+                    progress_callback(progress)
+            
             # Extract original extension from filename (e.g., "image_jpg.bin" -> ".jpg")
             file_info = file_utils.get_file_info(self.selected_file_path)
             base_name = file_info['base_name']
@@ -143,29 +162,13 @@ class ImageCrypto:
             if '_' in base_name:
                 # Extract the extension part after the last underscore
                 ext_part = base_name.split('_')[-1]
-                if ext_part:  # Make sure it's not empty
+                if ext_part and ext_part in ['jpg', 'jpeg', 'png', 'bmp']:  # Validate it's a known image extension
                     original_extension = f".{ext_part}"
             
             # If we couldn't extract the extension, default to .jpg
             if not original_extension:
                 original_extension = '.jpg'
                 
-            # Open file for reading
-            with open(self.selected_file_path, 'rb') as fin:
-                image = fin.read()
-            
-            # Convert to bytearray
-            image = bytearray(image)
-            
-            # Perform XOR operation with progress updates
-            total_bytes = len(image)
-            for index, value in enumerate(image):
-                image[index] = value ^ self.key
-                if index % (total_bytes // 10) == 0 and progress_callback:
-                    progress = (index / total_bytes) * 100
-                    progress_callback(progress)
-                    # Removed time.sleep to prevent UI freezing
-            
             # Create a new filename without the extension marker
             if '_' in base_name:
                 new_base_name = '_'.join(base_name.split('_')[:-1])  # Remove the extension part
@@ -179,13 +182,14 @@ class ImageCrypto:
             with open(new_path, 'wb') as fout:
                 fout.write(image)
                 
-            # Remove the encrypted file
-            try:
-                os.remove(self.selected_file_path)
-            except:
-                pass  # If removal fails, continue anyway
-            
+            # Verify the new file exists before removing the original
             if os.path.exists(new_path):
+                # Remove the encrypted file
+                try:
+                    os.remove(self.selected_file_path)
+                except:
+                    pass  # If removal fails, continue anyway
+                
                 self.selected_file_path = new_path
                 self.operation_successful = True
                 
@@ -193,9 +197,11 @@ class ImageCrypto:
                     progress_callback(100)
                 
                 if callback:
-                    callback(True, "The image has been decrypted successfully!")
-                return True, "The image has been decrypted successfully!"
+                    callback(True, f"The image has been decrypted successfully to {os.path.basename(new_path)}!")
+                return True, f"The image has been decrypted successfully to {os.path.basename(new_path)}!"
             else:
+                if callback:
+                    callback(False, "Failed to create the decrypted file")
                 return False, "Failed to create the decrypted file"
             
         except Exception as e:
