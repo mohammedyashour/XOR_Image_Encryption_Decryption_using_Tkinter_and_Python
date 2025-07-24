@@ -1,0 +1,28 @@
+name: Build EXE with PyInstaller
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+      - name: Build with PyInstaller
+        run: |
+          pyinstaller --noconfirm --onefile --windowed main.py
+      - name: Upload EXE Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: encrypted-app-exe
+          path: dist/main.exe
